@@ -19,10 +19,11 @@ import pandas as pd
 class EmotionRecognizer:
     """A class for training, testing and predicting emotions based on
     speech's features that are extracted and fed into `sklearn` or `keras` model"""
-    def __init__(self, model, **kwargs):
+    def __init__(self, model=None, **kwargs):
         """
         Params:
-            model (sklearn model): the model used to detect emotions.
+            model (sklearn model): the model used to detect emotions. If `model` is None, then self.determine_best_model()
+                will be automatically called
             emotions (list): list of emotions to be used. Note that these emotions must be available in
                 RAVDESS_TESS & EMODB Datasets, available nine emotions are the following:
                     'neutral', 'calm', 'happy', 'sad', 'angry', 'fear', 'disgust', 'ps' ( pleasant surprised ), 'boredom'.
@@ -42,8 +43,6 @@ class EmotionRecognizer:
         Note that when `tess_ravdess`, `emodb` and `custom_db` are set to `False`, `tess_ravdess` will be set to True
         automatically.
         """
-        # model
-        self.model = model
         # emotions
         self.emotions = kwargs.get("emotions", ["sad", "neutral", "happy"])
         # make sure that there are only available emotions
@@ -78,6 +77,12 @@ class EmotionRecognizer:
         # boolean attributes
         self.data_loaded = False
         self.model_trained = False
+
+        # model
+        if not model:
+            self.determine_best_model()
+        else:
+            self.model = model
 
     def _set_metadata_filenames(self):
         """
@@ -199,12 +204,10 @@ class EmotionRecognizer:
         grid_result = grid.fit(self.X_train, self.y_train)
         return grid_result.best_estimator_, grid_result.best_params_, grid_result.best_score_
 
-    def determine_best_model(self, train=True):
+    def determine_best_model(self):
         """
         Loads best estimators and determine which is best for test data,
         and then set it to `self.model`.
-        if `train` is True, then train that model on train data, so the model
-        will be ready for inference.
         In case of regression, the metric used is MSE and accuracy for classification.
         Note that the execution of this method may take several minutes due
         to training all estimators (stored in `grid` folder) for determining the best possible one.
@@ -240,11 +243,9 @@ class EmotionRecognizer:
             result.append((detector.model, accuracy))
 
         # sort the result
-        if self.classification:
-            result = sorted(result, key=lambda item: item[1], reverse=True)
-        else:
-            # regression, best is the lower, not the higher
-            result = sorted(result, key=lambda item: item[1], reverse=False)
+        # regression: best is the lower, not the higher
+        # classification: best is higher, not the lower
+        result = sorted(result, key=lambda item: item[1], reverse=self.classification)
         best_estimator = result[0][0]
         accuracy = result[0][1]
         self.model = best_estimator
@@ -316,8 +317,8 @@ class EmotionRecognizer:
         pl.imshow(matrix, cmap="binary")
         pl.show()
 
-    def n_emotions(self, emotion, partition):
-        """Returns number of `emotion` data samples in a particular `partition`
+    def get_n_samples(self, emotion, partition):
+        """Returns number data samples of the `emotion` class in a particular `partition`
         ('test' or 'train')
         """
         if partition == "test":
@@ -337,8 +338,8 @@ class EmotionRecognizer:
         test_samples = []
         total = []
         for emotion in self.emotions:
-            n_train = self.n_emotions(emotion, "train")
-            n_test = self.n_emotions(emotion, "test")
+            n_train = self.get_n_samples(emotion, "train")
+            n_test = self.get_n_samples(emotion, "test")
             train_samples.append(n_train)
             test_samples.append(n_test)
             total.append(n_train + n_test)
